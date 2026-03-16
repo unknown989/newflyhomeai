@@ -16,6 +16,8 @@ export interface ScanContextValue {
   nextScanAt: number | null;
   /** Seconds until the next scan, computed from nextScanAt. Null before first poll. */
   remaining: number | null;
+  /** True if the server is currently scanning (nextScanAt is 0 or in the past). */
+  isScanning: boolean;
   airportIata: string | null;
   scanIntervalSeconds: number;
 }
@@ -32,6 +34,7 @@ interface ScanStatusResponse {
 const ScanContext = createContext<ScanContextValue>({
   nextScanAt: null,
   remaining: null,
+  isScanning: false,
   airportIata: null,
   scanIntervalSeconds: 1800,
 });
@@ -57,6 +60,7 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
 
   const scanFiredRef = useRef(false);
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   // Tracks whether nextScanAt was ever in the future during this mount.
   // Used to distinguish "page loaded while next_scan_at = 0" (should NOT re-trigger)
@@ -104,13 +108,17 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
     const tick = () => {
       const now2 = Math.floor(Date.now() / 1000);
       let next: number | null = null;
+      let scanning = false;
 
       if (nextScanAt !== null) {
         const diff = nextScanAt - now2;
         next = diff > 0 ? diff : 0;
+        // Server is scanning if nextScanAt is 0 or in the past
+        scanning = diff <= 0;
       }
 
       setRemaining(next);
+      setIsScanning(scanning);
 
       if (next === 0 && !scanFiredRef.current) {
         scanFiredRef.current = true;
@@ -130,7 +138,7 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ScanContext.Provider
-      value={{ nextScanAt, remaining, airportIata, scanIntervalSeconds }}
+      value={{ nextScanAt, remaining, isScanning, airportIata, scanIntervalSeconds }}
     >
       {children}
     </ScanContext.Provider>

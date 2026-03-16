@@ -1,16 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-
-export interface ScanCountdownProps {
-  nextScanAt: number | null;
-}
+import { useScan } from "@/contexts/ScanContext";
 
 /**
  * Server-anchored scan countdown.
  * Receives nextScanAt (Unix seconds) from the server and counts down to it.
- * On page reload or remount with the same nextScanAt, the countdown continues
- * from the correct remaining time — it never resets to the full interval.
+ * Only shows "Scanning ..." when the server is actively scanning (isScanning = true).
+ * When the timer is running, shows the countdown in MM:SS format.
  *
  * SSR renders "Scanning …" as the initial value to prevent hydration mismatch.
  * The container uses fixed tabular-nums monospace font to prevent layout shift
@@ -24,7 +21,9 @@ function gmtOffsetLabel(): string {
   return `GMT${sign}${h}${m ? `:${String(m).padStart(2, "0")}` : ""}`;
 }
 
-export default function ScanCountdown({ nextScanAt }: ScanCountdownProps) {
+export default function ScanCountdown() {
+  const { remaining, isScanning } = useScan();
+  
   // null = not yet hydrated (SSR state) — renders "Scanning …" to match server
   const [display, setDisplay] = useState<string | null>(null);
   // Empty string on SSR; set on client to avoid hydration mismatch
@@ -36,19 +35,17 @@ export default function ScanCountdown({ nextScanAt }: ScanCountdownProps) {
 
   useEffect(() => {
     const tick = () => {
-      if (nextScanAt === null) {
+      if (isScanning) {
         setDisplay("scanning");
-        return;
-      }
-      const remaining = nextScanAt - Math.floor(Date.now() / 1000);
-      if (remaining <= 0) {
-        setDisplay("scanning");
-      } else {
+      } else if (remaining !== null && remaining > 0) {
         const mm = Math.floor(remaining / 60);
         const ss = remaining % 60;
         setDisplay(
           `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`
         );
+      } else {
+        // Not scanning and no remaining time — show scanning
+        setDisplay("scanning");
       }
     };
 
@@ -60,9 +57,9 @@ export default function ScanCountdown({ nextScanAt }: ScanCountdownProps) {
       clearTimeout(initId);
       clearInterval(id);
     };
-  }, [nextScanAt]);
+  }, [isScanning, remaining]);
 
-  const isScanning = display === null || display === "scanning";
+  const showScanning = display === null || display === "scanning";
 
   return (
     <div className="rounded-xl border border-border bg-navy-700 p-6">
@@ -74,7 +71,7 @@ export default function ScanCountdown({ nextScanAt }: ScanCountdownProps) {
           </span>
         )}
       </p>
-      {isScanning ? (
+      {showScanning ? (
         <span className="flex items-center gap-2 font-mono text-3xl font-bold text-accent">
           <span className="inline-block h-2 w-2 rounded-full bg-accent animate-pulse" />
           Scanning&nbsp;…
